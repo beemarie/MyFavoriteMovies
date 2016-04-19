@@ -172,10 +172,59 @@ class MovieDetailViewController: UIViewController {
     
     @IBAction func toggleFavorite(sender: AnyObject) {
         
-        // let shouldFavorite = !isFavorite
+        let shouldFavorite = !isFavorite
+        let reqparameters = [
+            Constants.TMDBParameterKeys.ApiKey:Constants.TMDBParameterValues.ApiKey,
+            Constants.TMDBParameterKeys.SessionID:self.appDelegate.sessionID!
+        ]
         
+        let request = NSMutableURLRequest(URL: appDelegate.tmdbURLFromParameters(reqparameters, withPathExtension: "/account/\(appDelegate.userID)/favorite"))
+        request.HTTPMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.HTTPBody = "{\n  \"media_type\": \"movie\",\n  \"media_id\": \(movie!.id.description),\n  \"favorite\": \(shouldFavorite)\n}".dataUsingEncoding(NSUTF8StringEncoding);
+        print(request.HTTPBody?.description)
+        
+        
+        let task = appDelegate.sharedSession.dataTaskWithRequest(request) { (data, response, error) in
+            print(request)
+            if let response = response, data = data {
+                print (response)
+                print(String(data:data, encoding:NSUTF8StringEncoding))
+            } else {
+                print (error)
+            }
+            
+            let jsonResponse:AnyObject!
+            do {
+                jsonResponse = try NSJSONSerialization.JSONObjectWithData(data!, options: .AllowFragments)
+            } catch {
+                print("there was some issue with serialization")
+                return
+            }
+            
+            guard let statusCode = jsonResponse[Constants.TMDBResponseKeys.StatusCode] as? Int where
+                statusCode == 1 || statusCode == 12 || statusCode == 13 else {
+                    print("no good status code")
+                    return
+            }
+            performUIUpdatesOnMain {
+                self.favoriteButton.tintColor = (shouldFavorite) ? nil : UIColor.blackColor()
+            }
+            
+            self.isFavorite = shouldFavorite
+            
+            
+        }
+        
+        
+        task.resume()
+        
+ 
+ 
         /* TASK: Add movie as favorite, then update favorite buttons */
         /* 1. Set the parameters */
+        
         /* 2/3. Build the URL, Configure the request */
         /* 4. Make the request */
         /* 5. Parse the data */
