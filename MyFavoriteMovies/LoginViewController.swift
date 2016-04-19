@@ -98,9 +98,36 @@ class LoginViewController: UIViewController {
         
         /* 4. Make the request */
         let task = appDelegate.sharedSession.dataTaskWithRequest(request) { (data, response, error) in
+            guard error == nil else {
+                self.displayError("There was an error with your request: \(error)")
+                return
+            }
             
-            /* 5. Parse the data */
-            /* 6. Use the data! */
+            guard let statuscode = (response as? NSHTTPURLResponse)?.statusCode where
+                statuscode >= 200 && statuscode <= 299 else {
+                    self.displayError("there was a statuscode other than 2xx")
+                    return
+            }
+            
+            guard let data = data else{
+                self.displayError("There was some problem with the data, it's = nil")
+                return
+            }
+            
+            // parse the data
+            let jsonData: AnyObject!
+            do {
+                jsonData = try NSJSONSerialization.JSONObjectWithData(data, options: .AllowFragments)
+            } catch {
+                self.displayError("couldn't do json serialization")
+                return
+            }
+            guard let requestToken = jsonData[Constants.TMDBResponseKeys.RequestToken] as? String else {
+                self.displayError("could not find key in jsonData \(Constants.TMDBResponseKeys.RequestToken)")
+                return
+            }
+            self.appDelegate.requestToken = requestToken
+            self.loginWithToken(requestToken)
         }
 
         /* 7. Start the request */
@@ -109,14 +136,57 @@ class LoginViewController: UIViewController {
     
     private func loginWithToken(requestToken: String) {
         
+        
         /* TASK: Login, then get a session id */
         
         /* 1. Set the parameters */
+        let methodParameters = [
+            Constants.TMDBParameterKeys.ApiKey: Constants.TMDBParameterValues.ApiKey,
+            Constants.TMDBParameterKeys.RequestToken: requestToken,
+            Constants.TMDBParameterKeys.Username: self.usernameTextField.text!,
+            Constants.TMDBParameterKeys.Password: self.passwordTextField.text!
+        ]
         /* 2/3. Build the URL, Configure the request */
+        let request = NSURLRequest(URL: appDelegate.tmdbURLFromParameters(methodParameters, withPathExtension: "/authentication/token/validate_with_login"))
+        
         /* 4. Make the request */
-        /* 5. Parse the data */
-        /* 6. Use the data! */
+        let task = appDelegate.sharedSession.dataTaskWithRequest(request) { (data, response, error) in
+            
+            guard error == nil else {
+                self.displayError("there was an error \(error)")
+                return
+            }
+            
+            /* 5. Parse the data */
+            guard let data = data else {
+                self.displayError("there was a problem with the data")
+                return
+            }
+            
+            let jsonData:AnyObject!
+            do {
+                jsonData = try NSJSONSerialization.JSONObjectWithData(data, options: .AllowFragments)
+            } catch {
+                self.displayError("there wasa an error parsing jsondata")
+                return
+            }
+            
+            guard let success = jsonData["success"] as! Int? where success == 1 else {
+                if let statusmessage = jsonData["status_message"] as? String {
+                    self.displayError(statusmessage)
+                    return
+                }
+                self.displayError("not successful, no status message")
+                return
+            }
+            self.displayError("successful login")
+            /* 6. Use the data! */
+            //print(jsonData)
+        }
         /* 7. Start the request */
+        task.resume()
+        
+       
     }
     
     private func getSessionID(requestToken: String) {
@@ -142,7 +212,18 @@ class LoginViewController: UIViewController {
         /* 6. Use the data! */
         /* 7. Start the request */
     }
+    
+    // if an error occurs, print it and re-enable the UI
+    func displayError(error: String) {
+        print(error)
+        performUIUpdatesOnMain {
+            self.setUIEnabled(true)
+            self.debugTextLabel.text = error
+        }
+    }
 }
+
+
 
 // MARK: - LoginViewController: UITextFieldDelegate
 
